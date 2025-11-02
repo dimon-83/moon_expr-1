@@ -199,3 +199,134 @@ test "number literals - invalid underscore cases" {
   assert_eq(match r17 { Err(_) => true; Ok(_) => false }, true)
 }
 
+///|
+/// 单字符操作符测试用例
+/// 测试 , ; % + - ^ 这些单字符操作符的词法分析
+test "single character operators" {
+  // 测试逗号操作符: 1,2
+  let tokens1 = Lexer::tokenize(Lexer::new(source="1,2"))
+  assert_eq(tokens1.length(), 4) // Num(1) + Oper(,) + Num(2) + EOF
+  assert_eq(tokens1[0].kind(), Kind::Num)
+  assert_eq(tokens1[0].value(), "1")
+  assert_eq(tokens1[1].kind(), Kind::Oper)
+  assert_eq(tokens1[1].value(), ",")
+  assert_eq(tokens1[2].kind(), Kind::Num)
+  assert_eq(tokens1[2].value(), "2")
+  assert_eq(tokens1[3].kind(), Kind::EOF)
+
+  // 测试分号操作符: 3;4
+  let tokens2 = Lexer::tokenize(Lexer::new(source="3;4"))
+  assert_eq(tokens2.length(), 4)
+  assert_eq(tokens2[0].kind(), Kind::Num)
+  assert_eq(tokens2[0].value(), "3")
+  assert_eq(tokens2[1].kind(), Kind::Oper)
+  assert_eq(tokens2[1].value(), ";")
+  assert_eq(tokens2[2].kind(), Kind::Num)
+  assert_eq(tokens2[2].value(), "4")
+  assert_eq(tokens2[3].kind(), Kind::EOF)
+
+  // 测试百分号操作符: 5%6
+  let tokens3 = Lexer::tokenize(Lexer::new(source="5%6"))
+  assert_eq(tokens3.length(), 4)
+  assert_eq(tokens3[0].kind(), Kind::Num)
+  assert_eq(tokens3[0].value(), "5")
+  assert_eq(tokens3[1].kind(), Kind::Oper)
+  assert_eq(tokens3[1].value(), "%")
+  assert_eq(tokens3[2].kind(), Kind::Num)
+  assert_eq(tokens3[2].value(), "6")
+  assert_eq(tokens3[3].kind(), Kind::EOF)
+
+  // 测试加号操作符: 7+8
+  let tokens4 = Lexer::tokenize(Lexer::new(source="7+8"))
+  assert_eq(tokens4.length(), 4)
+  assert_eq(tokens4[0].kind(), Kind::Num)
+  assert_eq(tokens4[0].value(), "7")
+  assert_eq(tokens4[1].kind(), Kind::Oper)
+  assert_eq(tokens4[1].value(), "+")
+  assert_eq(tokens4[2].kind(), Kind::Num)
+  assert_eq(tokens4[2].value(), "8")
+  assert_eq(tokens4[3].kind(), Kind::EOF)
+
+  // 测试减号操作符: 9-0
+  let tokens5 = Lexer::tokenize(Lexer::new(source="9-0"))
+  assert_eq(tokens5.length(), 4)
+  assert_eq(tokens5[0].kind(), Kind::Num)
+  assert_eq(tokens5[0].value(), "9")
+  assert_eq(tokens5[1].kind(), Kind::Oper)
+  assert_eq(tokens5[1].value(), "-")
+  assert_eq(tokens5[2].kind(), Kind::Num)
+  assert_eq(tokens5[2].value(), "0")
+  assert_eq(tokens5[3].kind(), Kind::EOF)
+
+  // 测试异或操作符: 1^2
+  let tokens6 = Lexer::tokenize(Lexer::new(source="1^2"))
+  assert_eq(tokens6.length(), 4)
+  assert_eq(tokens6[0].kind(), Kind::Num)
+  assert_eq(tokens6[0].value(), "1")
+  assert_eq(tokens6[1].kind(), Kind::Oper)
+  assert_eq(tokens6[1].value(), "^")
+  assert_eq(tokens6[2].kind(), Kind::Num)
+  assert_eq(tokens6[2].value(), "2")
+  assert_eq(tokens6[3].kind(), Kind::EOF)
+}
+
+///|
+/// 单字符操作符边界测试
+/// 测试操作符前后有空白字符的情况
+test "single character operators with whitespace" {
+  // 测试带空格的操作符: 1 + 2
+  let tokens1 = Lexer::tokenize(Lexer::new(source="1 + 2"))
+  assert_eq(tokens1.length(), 4)
+  assert_eq(tokens1[0].kind(), Kind::Num)
+  assert_eq(tokens1[0].value(), "1")
+  assert_eq(tokens1[1].kind(), Kind::Oper)
+  assert_eq(tokens1[1].value(), "+")
+  assert_eq(tokens1[2].kind(), Kind::Num)
+  assert_eq(tokens1[2].value(), "2")
+  assert_eq(tokens1[3].kind(), Kind::EOF)
+
+  // 测试多个空格: 3   ,   4
+  let tokens2 = Lexer::tokenize(Lexer::new(source="3   ,   4"))
+  assert_eq(tokens2.length(), 4)
+  assert_eq(tokens2[0].kind(), Kind::Num)
+  assert_eq(tokens2[0].value(), "3")
+  assert_eq(tokens2[1].kind(), Kind::Oper)
+  assert_eq(tokens2[1].value(), ",")
+  assert_eq(tokens2[2].kind(), Kind::Num)
+  assert_eq(tokens2[2].value(), "4")
+  assert_eq(tokens2[3].kind(), Kind::EOF)
+}
+
+///|
+/// 连续操作符测试
+/// 测试多个操作符连续出现的情况
+test "consecutive single character operators" {
+  // 测试连续操作符: 1+-2
+  let tokens1 = Lexer::tokenize(Lexer::new(source="1+-2"))
+  assert_eq(tokens1.length(), 5) // Num(1) + Oper(+) + Oper(-) + Num(2) + EOF
+  assert_eq(tokens1[0].kind(), Kind::Num)
+  assert_eq(tokens1[0].value(), "1")
+  assert_eq(tokens1[1].kind(), Kind::Oper)
+  assert_eq(tokens1[1].value(), "+")
+  assert_eq(tokens1[2].kind(), Kind::Oper)
+  assert_eq(tokens1[2].value(), "-")
+  assert_eq(tokens1[3].kind(), Kind::Num)
+  assert_eq(tokens1[3].value(), "2")
+  assert_eq(tokens1[4].kind(), Kind::EOF)
+
+  // 测试多个连续操作符: 3,;%4
+  let tokens2 = Lexer::tokenize(Lexer::new(source="3,;%4"))
+  assert_eq(tokens2.length(), 6) // Num(3) + Oper(,) + Oper(;) + Oper(%) + Num(4) + EOF
+  assert_eq(tokens2[0].kind(), Kind::Num)
+  assert_eq(tokens2[0].value(), "3")
+  assert_eq(tokens2[1].kind(), Kind::Oper)
+  assert_eq(tokens2[1].value(), ",")
+  assert_eq(tokens2[2].kind(), Kind::Oper)
+  assert_eq(tokens2[2].value(), ";")
+  assert_eq(tokens2[3].kind(), Kind::Oper)
+  assert_eq(tokens2[3].value(), "%")
+  assert_eq(tokens2[4].kind(), Kind::Num)
+  assert_eq(tokens2[4].value(), "4")
+  assert_eq(tokens2[5].kind(), Kind::EOF)
+}
+

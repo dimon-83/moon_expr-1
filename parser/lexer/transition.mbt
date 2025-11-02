@@ -33,9 +33,6 @@ suberror LexerTransitionError String
 
 // let the wrapper implement Transition by dispatching to inner concrete types
 pub fn Lexer::get_transition(self: Lexer) -> &Transition raise LexerTransitionError {
-    if self.eof {
-      self.state = State::EOF
-    }
     match self.state {
       Base => BaseTransition::{} as &Transition
       Number => NumberTransition::{} as &Transition
@@ -53,42 +50,70 @@ pub fn Lexer::get_transition(self: Lexer) -> &Transition raise LexerTransitionEr
 pub struct BaseTransition {} derive(Show ,Eq)
 
 impl Transition for BaseTransition with execute(_self : BaseTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
-    if lexer.eof {
+    // 首先检查是否到达EOF
+    if lexer.eof() {
+      println("BaseTransition::execute EOF")
+      lexer.push_token(Kind::EOF)
       lexer.state = State::EOF
       return
     }
-    let _ = match lexer.next_char() {
-      None => {
-        println("BaseTransition::execute None")
-        lexer.eof = true
-      } 
-      Some(c) => {
-        if c.is_whitespace() {
-          lexer.commit() //skip whitespace
-          lexer.state = State::Base
-        } else if c.is_digit(10) {
-          lexer.state = State::Number
-        } else if c == '.' {
-          // 处理以点开头的小数：例如 .5
-          let pv = try? Lexer::peek_current(lexer).to_string()
-          let _ = match pv {
-            Ok(s) => {
-              let _ = match s.get_char(0) {
-                Some(ch) => {
-                  // 下一个是数字或下划线：交由 NumberTransition 去统一校验
-                  if (ch >= '0' && ch <= '9') || ch == '_' {
-                    lexer.state = State::Number
+    
+    // 使用peek_current获取当前字符，避免next_char的Unicode问题
+    let current_view = try? lexer.peek_current()
+    match current_view {
+      Ok(view) => {
+        let current_str = view.to_string()
+        match current_str.get_char(0) {
+          Some(c) => {
+            // 消费当前字符
+            let _ = lexer.next_char()
+            
+            if c.is_whitespace() {
+              lexer.commit() //skip whitespace
+              lexer.state = State::Base
+            } else if c.is_digit(10) {
+              lexer.state = State::Number
+            } else if c == '.' {
+              // 处理以点开头的小数：例如 .5
+              let pv = try? lexer.peek_current()
+              let _ = match pv {
+                Ok(next_view) => {
+                  let next_str = next_view.to_string()
+                  match next_str.get_char(0) {
+                    Some(ch) => {
+                      // 下一个是数字或下划线：交由 NumberTransition 去统一校验
+                      if (ch >= '0' && ch <= '9') || ch == '_' {
+                        lexer.state = State::Number
+                      }
+                    }
+                    None => ()
                   }
                 }
-                None => ()
+                Err(_) => ()
               }
+            } else if (c.to_string().contains_any(chars="()[]{}")) {
+              // 将指针回退到括号字符开始处，由 BracketTransition 读取并产生 token
+              lexer.rewind_back()
+              lexer.state = State::Bracket
+            } else if (c.to_string().contains_any(chars=",;%+-^")) {
+              // 处理单字符操作符：, ; % + - ^
+              lexer.rewind_back()
+              lexer.state = State::Operator
             }
-            Err(_) => ()
           }
-        } else if (c.to_string().contains_any(chars="()[]{}")) {
-          // 将指针回退到括号字符开始处，由 BracketTransition 读取并产生 token
-          lexer.rewind_back()
-          lexer.state = State::Bracket
+          None => {
+            // 字符串为空，可能是特殊Unicode字符，继续处理
+            lexer.state = State::Base
+          }
+        }
+      }
+      Err(_) => {
+        // peek_current失败，可能到达EOF或遇到错误
+        if lexer.eof() {
+          lexer.push_token(Kind::EOF)
+          lexer.state = State::EOF
+        } else {
+          lexer.state = State::Base
         }
       }
     } 
@@ -108,12 +133,34 @@ impl Transition for NumberTransition with execute(_self : NumberTransition, lexe
   let mut base : Int = 10
   let mut started_with_dot : Bool = false
 
-  // 读取首字符；若为 '0'，尝试进制前缀；否则视作十进制起始
-  match Lexer::next_char(lexer) {
-    None => {
-      // 读取失败并不必然表示 EOF（例如遇到变体选择符或无效编码返回 None）。
-      // 仅在确认为 EOF 时才发出 EOF，否则回退到 Base 让其决定下一步。
-      if Lexer::eof(lexer) {
+  // 首先检查是否到达EOF
+  if lexer.eof() {
+    lexer.push_token(Kind::EOF)
+    lexer.state = State::EOF
+    return
+  }
+
+  // 使用peek_current获取首字符，避免Unicode问题
+  let first_view = try? lexer.peek_current()
+  let first_char = match first_view {
+    Ok(view) => {
+      let str = view.to_string()
+      match str.get_char(0) {
+        Some(c) => {
+          // 消费字符
+          let _ = lexer.next_char()
+          c
+        }
+        None => {
+          // 字符串为空，回退到Base状态
+          lexer.state = State::Base
+          return
+        }
+      }
+    }
+    Err(_) => {
+      // peek_current失败，可能到达EOF
+      if lexer.eof() {
         lexer.push_token(Kind::EOF)
         lexer.state = State::EOF
       } else {
@@ -121,7 +168,11 @@ impl Transition for NumberTransition with execute(_self : NumberTransition, lexe
       }
       return
     }
-    Some('.') => {
+  }
+
+  // 根据首字符进行处理
+  match first_char {
+    '.' => {
       // 以点开头的小数：.5 等，仅支持十进制
       base = 10
       started_with_dot = true
@@ -157,7 +208,7 @@ impl Transition for NumberTransition with execute(_self : NumberTransition, lexe
       if !has_frac_digit { raise LexerTransitionError("invalid decimal fraction: missing digits after '.'") }
       if prev_underscore { raise LexerTransitionError("invalid underscore at end of fraction") }
     }
-    Some('0') => {
+    '0' => {
       let pv = try? Lexer::peek_current(lexer).to_string()
       match pv {
         Ok(s) => {
@@ -274,7 +325,7 @@ impl Transition for NumberTransition with execute(_self : NumberTransition, lexe
       }
     }
     // 非零数字：走十进制路径
-    Some(_) => ()
+    _ => ()
   }
 
   // 十进制余下的整数位（允许下划线，但禁止段首/结尾/连续下划线）
@@ -463,8 +514,51 @@ impl Transition for IdentifierTransition with execute(_self : IdentifierTransiti
 /// 
 pub struct OperatorTransition {} derive(Show ,Eq)
 
-impl Transition for OperatorTransition with execute(_self : OperatorTransition, _lexer : Lexer) -> Unit raise LexerTransitionError {
+impl Transition for OperatorTransition with execute(_self : OperatorTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
   println("OperatorTransition::execute")
+  
+  // 首先检查是否到达EOF
+  if lexer.eof() {
+    lexer.push_token(Kind::EOF)
+    lexer.state = State::EOF
+    return
+  }
+  
+  // 使用peek_current获取当前字符
+  let current_view = try? lexer.peek_current()
+  match current_view {
+    Ok(view) => {
+      let current_str = view.to_string()
+      match current_str.get_char(0) {
+        Some(c) => {
+          // 处理单字符操作符: , ; % + - ^
+          if c == ',' || c == ';' || c == '%' || c == '+' || c == '-' || c == '^' {
+            // 消费当前字符
+            let _ = lexer.next_char()
+            lexer.push_token(Kind::Oper)
+            lexer.state = State::Base
+            return
+          }
+          
+          // 如果不是支持的操作符，抛出错误
+          raise LexerTransitionError("Unsupported operator: " + c.to_string())
+        }
+        None => {
+          // 字符串为空，可能是特殊Unicode字符，回退到Base状态
+          lexer.state = State::Base
+        }
+      }
+    }
+    Err(_) => {
+      // peek_current失败，可能到达EOF或遇到错误
+      if lexer.eof() {
+        lexer.push_token(Kind::EOF)
+        lexer.state = State::EOF
+      } else {
+        lexer.state = State::Base
+      }
+    }
+  }
 }
 
 pub struct StringTransition {} derive(Show ,Eq)
@@ -477,16 +571,40 @@ pub struct BracketTransition {} derive(Show ,Eq)
 
 impl Transition for BracketTransition with execute(_self : BracketTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
   println("BracketTransition::execute")
-  // 读取一个括号字符并推送 token，位置为该字符的索引范围
-  match lexer.next_char() {
-    Some(_) => {
-      lexer.push_token(Kind::Bracket)
-      lexer.state = State::Base
+  
+  // 首先检查是否到达EOF
+  if lexer.eof() {
+    lexer.push_token(Kind::EOF)
+    lexer.state = State::EOF
+    return
+  }
+  
+  // 使用peek_current获取当前字符
+  let current_view = try? lexer.peek_current()
+  match current_view {
+    Ok(view) => {
+      let current_str = view.to_string()
+      match current_str.get_char(0) {
+        Some(_) => {
+          // 消费当前字符
+          let _ = lexer.next_char()
+          lexer.push_token(Kind::Bracket)
+          lexer.state = State::Base
+        }
+        None => {
+          // 字符串为空，可能是特殊Unicode字符，回退到Base状态
+          lexer.state = State::Base
+        }
+      }
     }
-    None => {
-      // 输入耗尽则推 EOF
-      lexer.push_token(Kind::EOF)
-      lexer.state = State::EOF
+    Err(_) => {
+      // peek_current失败，可能到达EOF或遇到错误
+      if lexer.eof() {
+        lexer.push_token(Kind::EOF)
+        lexer.state = State::EOF
+      } else {
+        lexer.state = State::Base
+      }
     }
   }
 }
@@ -496,4 +614,5 @@ pub struct EOFTransition {} derive(Show ,Eq)
 impl Transition for EOFTransition with execute(_self : EOFTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
   println("EOFTransition::execute")
   lexer.push_token(Kind::EOF)
+  lexer.state = State::EOF
 }
