@@ -25,7 +25,7 @@ test "Token::new_empty constructor" {
   let empty_token = @lexer.Token::new_empty()
   inspect(
     Show::to_string(empty_token),
-    content="{location: {from: 0, to: 0}, kind: EOF, value: \"\"}",
+    content="{location: {from: 0, to: 0}, kind: EOF, view: \"\"}",
   )
 }
 
@@ -90,7 +90,7 @@ test "Lexer::next/eof" {
   inspect(lexer.next_char().unwrap(), content=" ")
 
   // Now reading beyond should set EOF and return null character
-  inspect(lexer.next_char().is_empty(), content="true")
+  inspect(lexer.next_char() is None, content="true")
   inspect(lexer.eof(), content="true")
 }
 
@@ -100,7 +100,7 @@ test "Lexer::next/empty_source" {
   let lexer = Lexer::new(source="")
 
   // First read should immediately set EOF and return null character
-  inspect(lexer.next_char().is_empty(), content="true")
+  inspect(lexer.next_char() is None, content="true")
   println(lexer.current())
   inspect(lexer.eof(), content="true")
 }
@@ -117,7 +117,7 @@ test "Lexer::eof - dynamic calculation by index/length (basic)" {
   ignore(lexer.next_char())
   inspect(lexer.eof(), content="true")
   // 再次读取，越界，应为 None 且 EOF 为 true
-  inspect(lexer.next_char().is_empty(), content="true")
+  inspect(lexer.next_char() is None, content="true")
   inspect(lexer.eof(), content="true")
 }
 
@@ -138,7 +138,7 @@ test "Lexer::eof - unicode boundaries and variation selectors" {
   let mut reached_end = false
   for {
     let ch = lexer.next_char()
-    if ch.is_empty() {
+    if ch is None {
       reached_end = true
       break
     }
@@ -152,14 +152,14 @@ test "Lexer::eof - recover/rewind_back consistency" {
   let lexer = Lexer::new(source="ab")
   ignore(lexer.next_char()) // 'a'
   ignore(lexer.next_char()) // 'b'
-  inspect(lexer.next_char().is_empty(), content="true") // EOF
+  inspect(lexer.next_char() is None, content="true") // EOF
   inspect(lexer.eof(), content="true")
   // 回退应清除 EOF
   lexer.rewind_back()
   inspect(lexer.eof(), content="false")
   // 再次推进到末尾
   ignore(lexer.next_char())
-  inspect(lexer.next_char().is_empty(), content="true")
+  inspect(lexer.next_char() is None, content="true")
   inspect(lexer.eof(), content="true")
 }
 

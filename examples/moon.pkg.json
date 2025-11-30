@@ -1,0 +1,8 @@
+{
+  "name": "examples",
+  "import": [
+    "sombozone/moon_expr/api",
+    "sombozone/moon_expr/runtime",
+    "sombozone/moon_expr/parser"
+  ]
+}

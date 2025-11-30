@@ -1,2 +1,6 @@
 {
+  "name": "parser",
+  "import": [
+    "sombozone/moon_expr/parser/lexer"
+  ]
 }

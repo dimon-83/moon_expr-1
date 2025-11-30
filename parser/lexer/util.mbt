@@ -35,6 +35,15 @@ pub fn is_alpha_numeric(ch : Char) -> Bool {
 }
 
 ///|
+/// 判断字符是否是操作符字符
+pub fn is_operator_char(ch : Char) -> Bool {
+  match ch {
+    '+' | '-' | '*' | '/' | '%' | '^' | '&' | '|' | '!' | '=' | '<' | '>' | '?' | ':' | ',' | ';' => true
+    _ => false
+  }
+}
+
+///|
 /// 判断字符串是否是合法标识符
 /// 首字符为"字母"，后续为"字母或数字"
 pub fn is_valid_identifier(str : String) -> Bool {
@@ -74,4 +83,17 @@ pub fn is_emoji_selector(ch : Char) -> Bool {
 /// 注意：这是一个近似判断，仅用于区分测试中的 '💡' 等表情符号，不作为通用 Unicode 分类方案。
 pub fn is_emoji(ch : Char) -> Bool {
   ch.utf16_len() == 2
+}
+
+///|
+/// 判断 StringView 内容是否与 String 相等
+pub fn view_eq(view: StringView, s: String) -> Bool {
+  if view.length() != s.length() { return false }
+  let mut i = 0
+  let len = view.length()
+  while i < len {
+    if view[i] != s[i] { return false }
+    i = i + 1
+  }
+  true
 }

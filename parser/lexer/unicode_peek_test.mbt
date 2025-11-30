@@ -10,7 +10,11 @@ test "peek_current with Unicode characters" {
     println("Token \{i}: \{tokens1[i].kind()} = '\{tokens1[i].value()}'")
   }
   // 根据实际输出调整期望值
-  inspect(tokens1.length(), content="2") // 可能Unicode字符被当作一个token处理
+  inspect(tokens1.length(), content="4")
+  inspect(tokens1[0].kind(), content="Ident")
+  inspect(tokens1[1].kind(), content="Oper")
+  inspect(tokens1[2].kind(), content="Ident")
+  inspect(tokens1[3].kind(), content="EOF")
 }
 
 test "peek_current with simple expression" {

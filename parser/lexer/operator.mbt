@@ -1,4 +1,11 @@
 ///|
+/// 操作符元信息与检索：为解析器与求值器提供统一的优先级/结合律
+/// 设计思路：
+/// - 使用 `Operator{op, precedence, associativity}` 表示操作符特性
+/// - 维护一元/二元操作符表，支持查找与分类判断
+/// 使用示例：
+/// - @parser/lexer/operator.find_binary_operator("+") -> Some(Operator)
+/// - Operator::precedence(info) 与 Operator::is_right_associative(info)
 /// 定义结合律枚举
 priv enum Associativity {
   Left
@@ -143,6 +150,9 @@ pub fn find_unary_operator(op : String) -> Operator? {
 pub fn find_binary_operator(op : String) -> Operator? {
   binary_operators.get(op)
 }
+
+pub fn Operator::precedence(self : Operator) -> Int { self.precedence }
+pub fn Operator::is_right_associative(self : Operator) -> Bool { self.associativity == Associativity::Right }
 
 ///|
 /// 判断是否为比较操作符

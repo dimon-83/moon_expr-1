@@ -43,20 +43,20 @@ pub fn Location::to(self : Location) -> Int {
 pub(all) struct Token {
   location : Location
   kind : Kind
-  value : String
+  view : StringView
 } derive(Show)
 
 ///|
-/// Create a new Token with the given location, kind, and value.
-pub fn Token::new(location~ : Location, kind~ : Kind, value~ : String) -> Token {
-  Token::{ location, kind, value }
+/// Create a new Token with the given location, kind, and value view.
+pub fn Token::new(location~ : Location, kind~ : Kind, view~ : StringView) -> Token {
+  Token::{ location, kind, view }
 }
 
 ///|
 /// Create an empty Token with default values.
 /// Uses EOF kind, empty string value, and location from 0 to 0.
 pub fn Token::new_empty() -> Token {
-  Token::{ location: Location::{ from: 0, to: 0 }, kind: Kind::EOF, value: "" }
+  Token::{ location: Location::{ from: 0, to: 0 }, kind: Kind::EOF, view: "".to_string_view() }
 }
 
 ///|
@@ -174,7 +174,7 @@ pub fn Lexer::tokenize(self : Lexer) -> Array[Token] raise LexerTransitionError 
 ///|
 /// Get the current slice of the lexer.
 pub fn Lexer::get_slice(self : Lexer) -> StringView raise Error {
-  println("get_slice : \{self.start.index} \{self.current.index}")
+  // // // println("get_slice : \{self.start.index} \{self.current.index}")
   self.source.to_string_view()[self.start.index:self.current.index]
 }
 
@@ -185,9 +185,9 @@ pub fn Lexer::next_char(self : Lexer) -> Char? {
     println("idx : \{self.current.index} pos : \{self.current.pos}")
     return None
   }
-  println(
-    "length : \{String::length(self.source)} \{self.source.iter().count()}",
-  )
+  // println(
+  //   "length : \{String::length(self.source)} \{self.source.iter().count()}",
+  // )
   let len = self.source.iter().count()
   if len == 0 {
     // 统一通过 Lexer::eof(self) 同步 EOF 状态，不直接赋值
@@ -257,7 +257,7 @@ pub fn Lexer::update_next_position(self : Lexer) -> Unit {
           index,
           bytes: self.current.bytes,
         }
-        println("next :  \{c} \{self.current} ")
+        // println("next :  \{c} \{self.current} ")
         return
       }
     }
@@ -350,14 +350,14 @@ pub fn Lexer::recover(self : Lexer) -> Unit {
 
 pub fn Lexer::push_token(self : Lexer, kind: Kind) -> Unit {
   // 使用从 start 到 current 的切片作为 token 文本
-  let res = try? self.get_slice().to_string()
-  println("push token : \{kind} \{res} \{self}")
+  let res = try? self.get_slice()
   match res {
-    Ok(v) => {
+    Ok(view) => {
+      println("push token : \{kind} \{view} \{self}")
       self.tokens.push(Token::{
         location: Location::{ from: self.start.index, to: self.current.index },
         kind,
-        value: v,
+        view,
       })
       self.commit()
     }
@@ -367,5 +367,6 @@ pub fn Lexer::push_token(self : Lexer, kind: Kind) -> Unit {
 
 /// Accessors for Token fields to avoid abstract-type field access issues
 pub fn Token::kind(self : Token) -> Kind { self.kind }
-pub fn Token::value(self : Token) -> String { self.value }
+pub fn Token::value(self : Token) -> String { self.view.to_string() }
+pub fn Token::view(self : Token) -> StringView { self.view }
 pub fn Token::location(self : Token) -> Location { self.location }

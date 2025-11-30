@@ -32,7 +32,7 @@ pub(open) trait Transition {
 suberror LexerTransitionError String
 
 // let the wrapper implement Transition by dispatching to inner concrete types
-pub fn Lexer::get_transition(self: Lexer) -> &Transition raise LexerTransitionError {
+pub fn Lexer::get_transition(self: Lexer) -> &Transition {
     match self.state {
       Base => BaseTransition::{} as &Transition
       Number => NumberTransition::{} as &Transition
@@ -41,7 +41,6 @@ pub fn Lexer::get_transition(self: Lexer) -> &Transition raise LexerTransitionEr
       String => StringTransition::{} as &Transition
       Bracket => BracketTransition::{} as &Transition
       EOF => EOFTransition::{} as &Transition
-      _ => raise LexerTransitionError("Invalid transition wrapper")
     }
 }
 
@@ -91,14 +90,20 @@ impl Transition for BaseTransition with execute(_self : BaseTransition, lexer : 
                 }
                 Err(_) => ()
               }
+            } else if c == '"' {
+              lexer.rewind_back()
+              lexer.state = State::String
             } else if (c.to_string().contains_any(chars="()[]{}")) {
               // 将指针回退到括号字符开始处，由 BracketTransition 读取并产生 token
               lexer.rewind_back()
               lexer.state = State::Bracket
-            } else if (c.to_string().contains_any(chars=",;%+-^")) {
-              // 处理单字符操作符：, ; % + - ^
+            } else if is_operator_char(c) {
+              // 处理单字符操作符：, ; % + - ^ * / < > = ! & | ? :
               lexer.rewind_back()
               lexer.state = State::Operator
+            } else if is_alphabetic(c) {
+              lexer.rewind_back()
+              lexer.state = State::Identifier
             }
           }
           None => {
@@ -361,7 +366,7 @@ impl Transition for NumberTransition with execute(_self : NumberTransition, lexe
   }
 
   // 步骤2：十进制的小数部分（如果尚未以点开头）
-  let mut saw_fraction : Bool = started_with_dot
+  let mut _saw_fraction : Bool = started_with_dot
   if base == 10 && !started_with_dot {
     let pv_dot = try? Lexer::peek_current(lexer).to_string()
     match pv_dot {
@@ -399,7 +404,7 @@ impl Transition for NumberTransition with execute(_self : NumberTransition, lexe
             }
             if !has_frac_digit { raise LexerTransitionError("invalid decimal fraction: missing digits after '.'") }
             if prev_underscore { raise LexerTransitionError("invalid underscore at end of fraction") }
-            saw_fraction = true
+            _saw_fraction = true
           }
           _ => ()
         }
@@ -504,9 +509,50 @@ pub fn IdentifierTransition::new() -> IdentifierTransition {
   IdentifierTransition::{}
 }
 
-impl Transition for IdentifierTransition with execute(_self : IdentifierTransition, _lexer : Lexer) -> Unit raise LexerTransitionError {
-  
+impl Transition for IdentifierTransition with execute(_self : IdentifierTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
   println("IdentifierTransition::execute")
+  if lexer.eof() {
+    lexer.push_token(Kind::EOF)
+    lexer.state = State::EOF
+    return
+  }
+  lexer.commit()
+  for {
+    let v = try? lexer.peek_current().to_string()
+    let mut consumed : Bool = false
+    match v {
+      Ok(s) => {
+        match s.get_char(0) {
+          Some(ch) => {
+            if is_alpha_numeric(ch) || ch == '$' {
+              let _ = lexer.next_char()
+              consumed = true
+            }
+          }
+          None => ()
+        }
+      }
+      Err(_) => ()
+    }
+    if !consumed { break }
+  }
+  
+  // Check if the identifier is actually an operator keyword (e.g. and, or, not)
+  let view_res = try? lexer.get_slice()
+  let kind = match view_res {
+    Ok(v) => {
+      if view_eq(v, "and") || view_eq(v, "or") || view_eq(v, "not") || 
+         view_eq(v, "in") || view_eq(v, "matches") || view_eq(v, "contains") || 
+         view_eq(v, "startsWith") || view_eq(v, "endsWith") {
+        Kind::Oper
+      } else {
+        Kind::Ident
+      }
+    }
+    Err(_) => Kind::Ident
+  }
+  lexer.push_token(kind)
+  lexer.state = State::Base
 }
 
 ///|
@@ -531,16 +577,40 @@ impl Transition for OperatorTransition with execute(_self : OperatorTransition, 
       let current_str = view.to_string()
       match current_str.get_char(0) {
         Some(c) => {
-          // 处理单字符操作符: , ; % + - ^
-          if c == ',' || c == ';' || c == '%' || c == '+' || c == '-' || c == '^' {
-            // 消费当前字符
-            let _ = lexer.next_char()
-            lexer.push_token(Kind::Oper)
-            lexer.state = State::Base
-            return
+          lexer.commit()
+          let first_view = try? lexer.peek_current()
+          match first_view {
+            Ok(v1) => {
+              let s1 = v1.to_string()
+              match s1.get_char(0) {
+                Some(ch1) => {
+                  let _ = lexer.next_char()
+                  let mut op = ch1.to_string()
+                  let second_view = try? lexer.peek_current()
+                  match second_view {
+                    Ok(v2) => {
+                      let s2 = v2.to_string()
+                      match s2.get_char(0) {
+                        Some(ch2) => {
+                          if (ch1 == '=' && ch2 == '=') || (ch1 == '!' && ch2 == '=') || (ch1 == '>' && ch2 == '=') || (ch1 == '<' && ch2 == '=') || (ch1 == '&' && ch2 == '&') || (ch1 == '|' && ch2 == '|') || (ch1 == '*' && ch2 == '*') || (ch1 == '?' && ch2 == '?') {
+                            let _ = lexer.next_char()
+                            op = op + ch2.to_string()
+                          }
+                        }
+                        None => ()
+                      }
+                    }
+                    Err(_) => ()
+                  }
+                  lexer.push_token(Kind::Oper)
+                  lexer.state = State::Base
+                  return
+                }
+                None => ()
+              }
+            }
+            Err(_) => ()
           }
-          
-          // 如果不是支持的操作符，抛出错误
           raise LexerTransitionError("Unsupported operator: " + c.to_string())
         }
         None => {
@@ -563,8 +633,58 @@ impl Transition for OperatorTransition with execute(_self : OperatorTransition, 
 
 pub struct StringTransition {} derive(Show ,Eq)
 
-impl Transition for StringTransition with execute(_self : StringTransition, _lexer : Lexer) -> Unit raise LexerTransitionError {
+impl Transition for StringTransition with execute(_self : StringTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
   println("StringTransition::execute")
+  if lexer.eof() {
+    lexer.push_token(Kind::EOF)
+    lexer.state = State::EOF
+    return
+  }
+  let pv = try? lexer.peek_current().to_string()
+  match pv {
+    Ok(s) => {
+      match s.get_char(0) {
+        Some('"') => { let _ = lexer.next_char() }
+        _ => ()
+      }
+    }
+    Err(_) => ()
+  }
+  lexer.commit()
+  let mut escaping : Bool = false
+  for {
+    let v = try? lexer.peek_current().to_string()
+    let mut step : Bool = false
+    match v {
+      Ok(ts) => {
+        match ts.get_char(0) {
+          Some(ch) => {
+            if escaping {
+              let _ = lexer.next_char()
+              escaping = false
+              step = true
+            } else if ch == '\\' {
+              let _ = lexer.next_char()
+              escaping = true
+              step = true
+            } else if ch == '"' {
+              break
+            } else {
+              let _ = lexer.next_char()
+              step = true
+            }
+          }
+          None => ()
+        }
+      }
+      Err(_) => ()
+    }
+    if !step { break }
+  }
+  lexer.push_token(Kind::Str)
+  let _ = lexer.next_char()
+  lexer.commit()
+  lexer.state = State::Base
 }
 
 pub struct BracketTransition {} derive(Show ,Eq)

@@ -1,0 +1,7 @@
+{
+  "name": "api",
+  "import": [
+    "sombozone/moon_expr/parser",
+    "sombozone/moon_expr/runtime"
+  ]
+}
