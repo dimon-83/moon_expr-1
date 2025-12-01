@@ -5,8 +5,15 @@
     "moonbitlang/x": "0.4.34"
   },
   "readme": "README.mbt.md",
-  "repository": "",
+  "repository": "https://github.com/sombozone/moon_expr",
   "license": "Apache-2.0",
-  "keywords": [],
-  "description": ""
+  "keywords": [
+    "expression",
+    "evaluator",
+    "parser",
+    "math",
+    "logic",
+    "interpreter"
+  ],
+  "description": "A high-performance, extensible mathematical and logical expression evaluation engine for MoonBit."
 }

@@ -47,3 +47,62 @@ pub fn register_function(registry: @runtime.FnRegistry, name: String, arity: Int
     implementation
   ))
 }
+
+// 变量收集器 Visitor 实现
+struct VariableCollector {
+  vars: Array[String]
+}
+
+fn VariableCollector::new() -> VariableCollector {
+  { vars: [] }
+}
+
+impl @parser.Visitor for VariableCollector with visit_ident(self, name: String) {
+  let mut found = false
+  for v in self.vars {
+    if v == name {
+      found = true
+      break
+    }
+  }
+  if not(found) {
+    self.vars.push(name)
+  }
+}
+
+impl @parser.Visitor for VariableCollector with visit_int_lit(self, _i: Int64) { }
+impl @parser.Visitor for VariableCollector with visit_double_lit(self, _d: Double) { }
+impl @parser.Visitor for VariableCollector with visit_bool_lit(self, _b: Bool) { }
+impl @parser.Visitor for VariableCollector with visit_str_lit(self, _s: String) { }
+impl @parser.Visitor for VariableCollector with visit_null_lit(self) { }
+
+impl @parser.Visitor for VariableCollector with visit_unary(self, _op: String, expr: @parser.Expr) {
+  expr.accept(self)
+}
+
+impl @parser.Visitor for VariableCollector with visit_binary(self, _op: String, left: @parser.Expr, right: @parser.Expr) {
+  left.accept(self)
+  right.accept(self)
+}
+
+impl @parser.Visitor for VariableCollector with visit_grouping(self, expr: @parser.Expr) {
+  expr.accept(self)
+}
+
+impl @parser.Visitor for VariableCollector with visit_call(self, _name: String, args: Array[@parser.Expr]) {
+  for arg in args {
+    arg.accept(self)
+  }
+}
+
+// 获取 AST 中的变量列表（去重）
+pub fn get_ast_variables(expr: @parser.Expr) -> Array[String] {
+  let collector = VariableCollector::new()
+  expr.accept(collector)
+  collector.vars
+}
+
+// 获取 Program 中的变量列表
+pub fn Program::get_variables(self: Program) -> Array[String] {
+  get_ast_variables(self.expr)
+}
