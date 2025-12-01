@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoonExpr Playground</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f7;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; text-align: center; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007aff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #0056b3; }
+        #vars-container {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+        .var-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .var-label { width: 100px; font-weight: bold; }
+        .result-box {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #e8f5e9;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .result-value { font-size: 24px; font-weight: bold; color: #2e7d32; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MoonExpr Playground</h1>
+        
+        <div class="input-group">
+            <label for="expression">表达式 (Expression)</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="expression" placeholder="例如: a + b * sin(c)" value="a + b * 2">
+                <button id="btn-parse">解析变量</button>
+            </div>
+        </div>
+
+        <div id="vars-container" class="hidden">
+            <h3>输入变量值</h3>
+            <div id="vars-list"></div>
+            <div style="margin-top: 15px; text-align: right;">
+                <button id="btn-eval">计算结果</button>
+            </div>
+        </div>
+
+        <div id="result-container" class="hidden result-box">
+            <div>计算结果:</div>
+            <div id="result-value" class="result-value">-</div>
+        </div>
+    </div>
+
+    <script>
+        let wasmExports = null;
+        let parse_vars_fn = null;
+        let evaluate_fn = null;
+        
+        // Helper to find function by partial name
+        function findExport(exports, name) {
+            for (let key in exports) {
+                if (key.includes(name)) return exports[key];
+            }
+            return null;
+        }
+
+        async function loadWasm() {
+            try {
+                const response = await fetch('../target/wasm/release/build/playground/playground.wasm');
+                const bytes = await response.arrayBuffer();
+                
+                // Import object for MoonBit Wasm
+                // MoonBit sometimes requires specific imports for printing etc.
+                const importObject = {
+                    spectest: {
+                        print_char: (c) => console.log(String.fromCharCode(c))
+                    },
+                    js_string: {
+                        new: (ptr, len) => {},
+                        empty: () => {},
+                        // Add dummy implementations if needed
+                    }
+                };
+
+                const { instance } = await WebAssembly.instantiate(bytes, importObject);
+                wasmExports = instance.exports;
+                console.log("Wasm exports:", wasmExports);
+                
+                // Initialize
+                if (wasmExports._start) wasmExports._start();
+                
+                // Map functions (handling potential name mangling)
+                // Expected names: "parse_vars_wasm", "evaluate_wasm", etc.
+                // MoonBit might export them as "sombozone/moon_expr/playground::parse_vars_wasm"
+                
+                // We use the findExport helper to be robust
+                parse_vars_fn = findExport(wasmExports, "parse_vars_wasm");
+                evaluate_fn = findExport(wasmExports, "evaluate_wasm");
+                
+                console.log("Functions mapped:", { parse_vars_fn, evaluate_fn });
+                
+            } catch (e) {
+                console.error("Failed to load Wasm:", e);
+                document.getElementById('result-value').textContent = "Error loading Wasm: " + e;
+            }
+        }
+
+        loadWasm();
+
+        function parse_vars_wrapper(expr) {
+            if (!wasmExports) throw new Error("Wasm not loaded");
+            
+            const clear = findExport(wasmExports, "clear_input");
+            const append = findExport(wasmExports, "append_char");
+            const get_len = findExport(wasmExports, "get_output_len");
+            const get_char = findExport(wasmExports, "get_output_char");
+            
+            if (clear) clear();
+            if (append) {
+                for (let i = 0; i < expr.length; i++) {
+                    append(expr.charCodeAt(i));
+                }
+            }
+            
+            const len = parse_vars_fn();
+            let res = "";
+            if (get_char) {
+                for (let i = 0; i < len; i++) {
+                    res += String.fromCharCode(get_char(i));
+                }
+            }
+            return res;
+        }
+
+        function evaluate_expr_wrapper(expr, names, values) {
+             if (!wasmExports) throw new Error("Wasm not loaded");
+             
+             const clear = findExport(wasmExports, "clear_buffers");
+             const append_expr = findExport(wasmExports, "append_expr_char");
+             const append_names = findExport(wasmExports, "append_names_char");
+             const append_values = findExport(wasmExports, "append_values_char");
+             const get_char = findExport(wasmExports, "get_output_char");
+             
+             if (clear) clear();
+             
+             if (append_expr) 
+                for (let i = 0; i < expr.length; i++) append_expr(expr.charCodeAt(i));
+             
+             const namesJson = JSON.stringify(names);
+             if (append_names)
+                for (let i = 0; i < namesJson.length; i++) append_names(namesJson.charCodeAt(i));
+             
+             const valuesJson = JSON.stringify(values);
+             if (append_values)
+                for (let i = 0; i < valuesJson.length; i++) append_values(valuesJson.charCodeAt(i));
+             
+             const len = evaluate_fn();
+             let res = "";
+             if (get_char) {
+                for (let i = 0; i < len; i++) {
+                   res += String.fromCharCode(get_char(i));
+                }
+             }
+             return res;
+        }
+    </script>
+
+    <script>
+        // UI Logic (Adapted for Wasm wrapper)
+        const exprInput = document.getElementById('expression');
+        const btnParse = document.getElementById('btn-parse');
+        const varsContainer = document.getElementById('vars-container');
+        const varsList = document.getElementById('vars-list');
+        const btnEval = document.getElementById('btn-eval');
+        const resultContainer = document.getElementById('result-container');
+        const resultValue = document.getElementById('result-value');
+
+        let currentVars = [];
+
+        btnParse.addEventListener('click', () => {
+            const expr = exprInput.value.trim();
+            if (!expr) return;
+
+            try {
+                // 调用 MoonBit 函数解析变量
+                // 注意：函数挂载在 window 对象上
+                if (!wasmExports) {
+                    throw new Error("MoonBit module not loaded yet or export failed");
+                }
+                const varsJson = parse_vars_wrapper(expr);
+                currentVars = JSON.parse(varsJson);
+                
+                renderVarInputs();
+                varsContainer.classList.remove('hidden');
+                resultContainer.classList.add('hidden');
+                
+                // 如果没有变量，直接计算
+                if (currentVars.length === 0) {
+                    varsContainer.classList.add('hidden');
+                    calculate();
+                }
+            } catch (e) {
+                alert('解析失败: ' + e);
+            }
+        });
+
+        function renderVarInputs() {
+            varsList.innerHTML = '';
+            currentVars.forEach(v => {
+                const row = document.createElement('div');
+                row.className = 'var-row';
+                row.innerHTML = `
+                    <div class="var-label">${v}:</div>
+                    <input type="text" data-var="${v}" placeholder="输入数值或 true/false" value="0">
+                `;
+                varsList.appendChild(row);
+            });
+        }
+
+        btnEval.addEventListener('click', calculate);
+
+        function calculate() {
+            const expr = exprInput.value.trim();
+            const names = [];
+            const values = [];
+
+            // 收集输入值
+            if (currentVars.length > 0) {
+                const inputs = varsList.querySelectorAll('input');
+                inputs.forEach(input => {
+                    names.push(input.dataset.var);
+                    values.push(input.value);
+                });
+            }
+
+            try {
+                // 调用 MoonBit 函数进行计算
+                if (!wasmExports) {
+                     throw new Error("MoonBit module not loaded yet");
+                }
+                
+                const res = evaluate_expr_wrapper(expr, names, values);
+                resultValue.textContent = res;
+                resultContainer.classList.remove('hidden');
+            } catch (e) {
+                resultValue.textContent = "Error: " + e;
+                resultContainer.classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

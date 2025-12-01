@@ -1,0 +1,24 @@
+{
+  "name": "playground",
+  "import": [
+    "sombozone/moon_expr/api",
+    "sombozone/moon_expr/runtime"
+  ],
+  "is-main": true,
+  "link": {
+    "wasm": {
+      "exports": [
+        "parse_vars_wasm",
+        "evaluate_wasm",
+        "clear_input",
+        "append_char",
+        "get_output_len",
+        "get_output_char",
+        "clear_buffers",
+        "append_expr_char",
+        "append_names_char",
+        "append_values_char"
+      ]
+    }
+  }
+}
