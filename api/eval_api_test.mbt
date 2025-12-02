@@ -19,3 +19,17 @@ test "api get_ast_variables" {
   let vars = get_ast_variables(expr)
   inspect(vars, content="[\"y\", \"z\"]")
 }
+
+test "api eval math functions" {
+  let ctx : Map[String, @runtime.Value] = {}
+  
+  // abs
+  inspect(eval_str("abs(-5)", ctx), content="Int(5)")
+  inspect(eval_str("abs(-5.5)", ctx), content="Float(5.5)")
+  
+  // sin(0) = 0
+  inspect(eval_str("sin(0)", ctx), content="Float(0)")
+  
+  // cos(0) = 1
+  inspect(eval_str("cos(0)", ctx), content="Float(1)")
+}

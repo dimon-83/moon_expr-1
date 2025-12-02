@@ -131,6 +131,22 @@ fn impl_abs(args: Array[Value]) -> Value {
   }
 }
 
+fn impl_sin(args: Array[Value]) -> Value {
+  match args[0] {
+    Value::Float(f) => Value::Float(@math.sin(f))
+    Value::Int(i) => Value::Float(@math.sin(i.to_double()))
+    _ => Value::Null
+  }
+}
+
+fn impl_cos(args: Array[Value]) -> Value {
+  match args[0] {
+    Value::Float(f) => Value::Float(@math.cos(f))
+    Value::Int(i) => Value::Float(@math.cos(i.to_double()))
+    _ => Value::Null
+  }
+}
+
 fn impl_pow(args: Array[Value]) -> Value {
   match args[0] {
     Value::Int(a) => match args[1] {
@@ -244,6 +260,12 @@ pub fn builtin_registry() -> FnRegistry {
   // Math
   reg.register(FnSpec::new("abs", [Type::Int], Type::Int, true, true, impl_abs))
   reg.register(FnSpec::new("abs", [Type::Float], Type::Float, true, true, impl_abs))
+
+  reg.register(FnSpec::new("sin", [Type::Float], Type::Float, true, true, impl_sin))
+  reg.register(FnSpec::new("sin", [Type::Int], Type::Float, true, true, impl_sin))
+
+  reg.register(FnSpec::new("cos", [Type::Float], Type::Float, true, true, impl_cos))
+  reg.register(FnSpec::new("cos", [Type::Int], Type::Float, true, true, impl_cos))
   
   reg.register(FnSpec::new("pow", [Type::Int, Type::Int], Type::Int, true, true, impl_pow))
   // reg.register(FnSpec::new("pow", [Type::Float, Type::Float], Type::Float, true, true, impl_pow)) // TODO: float pow
