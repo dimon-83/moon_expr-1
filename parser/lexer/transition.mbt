@@ -51,7 +51,6 @@ pub struct BaseTransition {} derive(Show ,Eq)
 impl Transition for BaseTransition with execute(_self : BaseTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
     // 首先检查是否到达EOF
     if lexer.eof() {
-      println("BaseTransition::execute EOF")
       lexer.push_token(Kind::EOF)
       lexer.state = State::EOF
       return
@@ -122,7 +121,6 @@ impl Transition for BaseTransition with execute(_self : BaseTransition, lexer : 
         }
       }
     } 
-    println("BaseTransition::execute")
   }
 
 ///|
@@ -130,7 +128,6 @@ pub struct NumberTransition {} derive(Show ,Eq)
 
 impl Transition for NumberTransition with execute(_self : NumberTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
   // 清空并按“步骤1：整数部分（不同进制）”实现
-  println("NumberTransition::execute")
   // 回退到数字起点，由本状态完整读取数字
   lexer.rewind_back()
   lexer.commit()
@@ -510,7 +507,6 @@ pub fn IdentifierTransition::new() -> IdentifierTransition {
 }
 
 impl Transition for IdentifierTransition with execute(_self : IdentifierTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
-  println("IdentifierTransition::execute")
   if lexer.eof() {
     lexer.push_token(Kind::EOF)
     lexer.state = State::EOF
@@ -561,8 +557,6 @@ impl Transition for IdentifierTransition with execute(_self : IdentifierTransiti
 pub struct OperatorTransition {} derive(Show ,Eq)
 
 impl Transition for OperatorTransition with execute(_self : OperatorTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
-  println("OperatorTransition::execute")
-  
   // 首先检查是否到达EOF
   if lexer.eof() {
     lexer.push_token(Kind::EOF)
@@ -634,7 +628,6 @@ impl Transition for OperatorTransition with execute(_self : OperatorTransition, 
 pub struct StringTransition {} derive(Show ,Eq)
 
 impl Transition for StringTransition with execute(_self : StringTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
-  println("StringTransition::execute")
   if lexer.eof() {
     lexer.push_token(Kind::EOF)
     lexer.state = State::EOF
@@ -690,8 +683,6 @@ impl Transition for StringTransition with execute(_self : StringTransition, lexe
 pub struct BracketTransition {} derive(Show ,Eq)
 
 impl Transition for BracketTransition with execute(_self : BracketTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
-  println("BracketTransition::execute")
-  
   // 首先检查是否到达EOF
   if lexer.eof() {
     lexer.push_token(Kind::EOF)
@@ -732,7 +723,6 @@ impl Transition for BracketTransition with execute(_self : BracketTransition, le
 pub struct EOFTransition {} derive(Show ,Eq)
 
 impl Transition for EOFTransition with execute(_self : EOFTransition, lexer : Lexer) -> Unit raise LexerTransitionError {
-  println("EOFTransition::execute")
   lexer.push_token(Kind::EOF)
   lexer.state = State::EOF
 }
